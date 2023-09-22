@@ -8,7 +8,7 @@ Welcome to our submission for the Sui Liquid Staking Hackathon! Enclosed in this
 
 At the heart of our project is the user-friendly interface of Meta Pool, designed to streamline the SUI token staking process. Enthusiasts can easily connect their preferred Sui wallet to Meta Pool and seamlessly stake any desired amount of SUI tokens.
 
-Upon staking, the smart contract mints a special token, termed mpSui. This token is more than just a digital asset—it signifies a user's share in the overall staked assets. As such, the value of mpSui naturally increases relative to the original Sui tokens and the rewards reaped by validators.
+Upon staking, the smart contract mints a special token, termed `mpSui`. This token is more than just a digital asset—it signifies a user's share in the overall staked assets. As such, the value of `mpSui` naturally increases relative to the original Sui tokens and the rewards reaped by validators.
 
 Our ultimate vision is to disseminate all staked Sui among a diverse array of validators, employing the Nakamoto coefficient as a guiding principle. This method underscores our commitment to fortifying the decentralization of the Sui Network.
 
