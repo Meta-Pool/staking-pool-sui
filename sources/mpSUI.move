@@ -8,7 +8,7 @@ module meta_pool::mpsui {
     use std::option;
 
     use sui::coin::{Self, Coin, TreasuryCap};
-    use sui::balance::{Self, Balance, Supply};
+    use sui::balance::{Self, Balance};
     use sui::object::{Self, UID};
     use sui::sui::SUI;
     use sui::transfer;
@@ -87,11 +87,12 @@ module meta_pool::mpsui {
         let num_assets: u64 = coin::value(&assets);
         assert!(num_assets >= pool.min_deposit_amount, ENotEnoughSui);
 
+        let shares = preview_deposit(pool, num_assets);
         coin::put(&mut pool.sui, assets);
 
         let minted_balance = balance::increase_supply(
             coin::supply_mut(&mut pool.treasury),
-            num_assets
+            shares
         );
 
         coin::from_balance(minted_balance, ctx)
@@ -104,13 +105,15 @@ module meta_pool::mpsui {
         shares: Coin<MPSUI>,
         ctx: &mut TxContext
     ): Coin<SUI> {
-        let num_sui = balance::decrease_supply(
+        let assets = preview_redeem(pool, coin::value(&shares));
+        let _num_sui = balance::decrease_supply(
             coin::supply_mut(&mut pool.treasury),
             coin::into_balance(shares)
         );
+
         let sui = coin::take(
             &mut pool.sui,
-            num_sui,
+            assets,
             ctx
         );
 
@@ -129,10 +132,40 @@ module meta_pool::mpsui {
         balance::value(&pool.sui)
     }
 
+    public fun convert_to_assets(pool: &StakingPool, shares: u64): u64 {
+        internal_convert_to_assets(pool, shares, false)
+    }
+
+    public fun preview_redeem(pool: &StakingPool, shares: u64): u64 {
+        internal_convert_to_assets(pool, shares, false)
+    }
+
     public fun convert_to_shares(pool: &StakingPool, assets: u64): u64 {
         internal_convert_to_shares(pool, assets, false)
     }
-    
+
+    public fun preview_deposit(pool: &StakingPool, assets: u64): u64 {
+        internal_convert_to_shares(pool, assets, false)
+    }
+
+    fun internal_convert_to_assets(pool: &StakingPool, shares: u64, round_up: bool): u64 {
+        let total_supply = total_supply(pool);
+        if (total_supply == 0) {
+            shares
+        } else {
+            proportional(shares, total_assets(pool), total_supply, round_up)
+        }
+    }
+
+    fun internal_convert_to_shares(pool: &StakingPool, assets: u64, round_up: bool): u64 {
+        let total_supply = total_supply(pool);
+        if (assets == 0 || total_supply == 0) {
+            assets
+        } else {
+            proportional(assets, total_supply, total_assets(pool), round_up)
+        }
+    }
+
     fun proportional(value: u64, multiplier: u64, divisor: u64, round_up: bool): u64 {
         let product = value * multiplier;
         let quotient = product / divisor;
@@ -141,20 +174,6 @@ module meta_pool::mpsui {
             quotient + 1
         } else {
             quotient
-        }
-    }
-
-    fun internal_convert_to_shares(pool: &StakingPool, assets: u64, round_up: bool): u64 {
-        // uint256 supply = totalSupply();
-        // return
-        //     (assets == 0 || supply == 0)
-        //         ? _initialConvertToShares(assets, rounding)
-        //         : assets.mulDiv(supply, totalAssets(), rounding);
-        let total_supply = total_supply(pool);
-        if (assets == 0 || total_supply == 0) {
-            assets
-        } else {
-            proportional(assets, total_supply, total_assets(pool), round_up)
         }
     }
 
