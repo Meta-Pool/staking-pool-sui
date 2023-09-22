@@ -1,8 +1,13 @@
 // Meta Pool
 // SPDX-License-Identifier: MIT
 
+// Reference:
+// https://github.com/MystenLabs/sui/blob/main/crates/sui-framework/packages/sui-framework/sources/coin.move#L251
+
 module meta_pool::mpsui {
-    use sui::coin::{Self, Coin};
+    use std::option;
+
+    use sui::coin::{Self, Coin, TreasuryCap};
     use sui::balance::{Self, Balance, Supply};
     use sui::object::{Self, UID};
     use sui::sui::SUI;
@@ -18,7 +23,8 @@ module meta_pool::mpsui {
     struct StakingPool has key {
         id: UID,
         /// capability allowing the pool to mint and burn MPSUI Tokens.
-        total_supply: Supply<MPSUI>,
+        // total_supply: Supply<MPSUI>,
+        treasury: TreasuryCap<MPSUI>,
         min_deposit_amount: u64,
         sui: Balance<SUI>,
     }
@@ -28,14 +34,27 @@ module meta_pool::mpsui {
     #[allow(unused_function)]
     fun init(witness: MPSUI, ctx: &mut TxContext) {
         // Get a treasury cap for the coin put it in the reserve
-        let total_supply = balance::create_supply<MPSUI>(witness);
+        // let total_supply = balance::create_supply<MPSUI>(witness);
+
+        let (treasury, metadata) = coin::create_currency(
+            witness,
+            9,
+            b"mpSUI",
+            b"Meta Pool Staked SUI",
+            b"",
+            option::none(),
+            ctx
+        );
 
         transfer::share_object(StakingPool {
             id: object::new(ctx),
-            total_supply,
+            treasury,
             min_deposit_amount: 1000,
             sui: balance::zero<SUI>(),
-        })
+        });
+
+        transfer::public_freeze_object(metadata);
+        // transfer::public_transfer(treasury, tx_context::sender(ctx));
     }
 
     public entry fun deposit(
@@ -71,7 +90,7 @@ module meta_pool::mpsui {
         coin::put(&mut pool.sui, assets);
 
         let minted_balance = balance::increase_supply(
-            &mut pool.total_supply,
+            coin::supply_mut(&mut pool.treasury),
             num_assets
         );
 
@@ -86,7 +105,7 @@ module meta_pool::mpsui {
         ctx: &mut TxContext
     ): Coin<SUI> {
         let num_sui = balance::decrease_supply(
-            &mut pool.total_supply,
+            coin::supply_mut(&mut pool.treasury),
             coin::into_balance(shares)
         );
         let sui = coin::take(
@@ -100,9 +119,9 @@ module meta_pool::mpsui {
 
     // === Reads ===
 
-    /// Return the number of `MANAGED` coins in circulation
+    /// Return the number of `mpSUI` coins in circulation
     public fun total_supply(pool: &StakingPool): u64 {
-        balance::supply_value(&pool.total_supply)
+        coin::total_supply(&pool.treasury)
     }
 
     /// Return the number of SUI in the reserve
@@ -110,9 +129,34 @@ module meta_pool::mpsui {
         balance::value(&pool.sui)
     }
 
-    // public fun convert_to_shares(assets: u64): u64 {
+    public fun convert_to_shares(pool: &StakingPool, assets: u64): u64 {
+        internal_convert_to_shares(pool, assets, false)
+    }
+    
+    fun proportional(value: u64, multiplier: u64, divisor: u64, round_up: bool): u64 {
+        let product = value * multiplier;
+        let quotient = product / divisor;
+        
+        if (round_up && product % divisor > 0) {
+            quotient + 1
+        } else {
+            quotient
+        }
+    }
 
-    // }
+    fun internal_convert_to_shares(pool: &StakingPool, assets: u64, round_up: bool): u64 {
+        // uint256 supply = totalSupply();
+        // return
+        //     (assets == 0 || supply == 0)
+        //         ? _initialConvertToShares(assets, rounding)
+        //         : assets.mulDiv(supply, totalAssets(), rounding);
+        let total_supply = total_supply(pool);
+        if (assets == 0 || total_supply == 0) {
+            assets
+        } else {
+            proportional(assets, total_supply, total_assets(pool), round_up)
+        }
+    }
 
     #[test_only]
     public fun init_for_testing(ctx: &mut TxContext) {
